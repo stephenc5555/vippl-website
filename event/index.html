@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#061431">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="You've been invited to a Live Event on VIPpl.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>VIPpl · Live Event Invitation</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:24px;background:#061431;color:#f5f7fc;font:16px/1.55 system-ui,-apple-system,sans-serif}.card{width:100%;max-width:440px;text-align:center;background:#0d2042;border:1px solid #34486c;border-radius:22px;padding:35px 24px}.brand{font-size:64px;font-weight:850;letter-spacing:-.075em;line-height:1.1}.gold{color:#ffe000}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;color:#d9bd76;margin-top:30px}h1{font-size:26px;line-height:1.2;margin:10px 0}p{color:#b9c9db;font-size:14px}.button{display:flex;align-items:center;justify-content:center;background:#ffe000;color:#061431;border-radius:11px;padding:15px;font-size:15px;font-weight:750;text-decoration:none;margin:24px 0 12px}.button:focus-visible,a:focus-visible{outline:2px solid white;outline-offset:4px}.muted{font-size:12px;color:#a9b8cb}a{color:#d9bd76}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="card">
+<div class="brand" aria-label="VIPpl">VIP<span class="gold">pl</span></div>
+<div class="eyebrow">LIVE EVENT</div>
+<h1 id="title">You're invited.</h1>
+<p id="description">Open VIPpl to view your invitation. Approved members can join while the event is active and they are near its original location.</p>
+<a id="open" class="button" hidden>OPEN VIPpl &rsaquo;</a>
+<p id="help" class="muted" hidden>VIPpl must already be installed. If the button does not open the app, try opening this page in your phone's browser instead of an in-app browser. During the private beta, contact your inviter for app access.</p>
+<p><a href="/">Visit VIPpl.vip</a></p>
+<noscript><p>Enable JavaScript to open your invitation in VIPpl.</p></noscript>
+</main>
+<script>
+(function(){
+  const id=location.hash.slice(1);
+  const valid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if(!valid){document.getElementById('title').textContent='Invitation unavailable';document.getElementById('description').textContent='Ask your inviter for a valid Live Event link.';return;}
+  const open=document.getElementById('open');
+  open.href='vippl://event/'+id.toLowerCase();open.hidden=false;document.getElementById('help').hidden=false;
+})();
+</script>
+</body>
+</html>
