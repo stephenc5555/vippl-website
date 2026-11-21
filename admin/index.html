@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>VIPpl • Admin Preview</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#f7f7f7;background:#090909}*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #292929;padding:20px clamp(20px,5vw,72px);display:flex;align-items:center;justify-content:space-between}.brand{font-size:29px;font-weight:850;letter-spacing:-1.5px}.brand span{color:#f9d22c}.pill{color:#f9d22c;border:1px solid #665819;border-radius:40px;padding:7px 12px;font-size:12px}main{max-width:1150px;margin:40px auto;padding:0 22px}h1{font-size:clamp(30px,4vw,48px);margin:0 0 9px}p{color:#aaa;line-height:1.5}.card{background:#151515;border:1px solid #303030;border-radius:16px;padding:25px;margin-top:25px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.metric{font-size:35px;font-weight:750;color:#f9d22c}input,select,button{font:inherit;border-radius:9px;padding:12px 14px}input,select{background:#0b0b0b;border:1px solid #424242;color:#fff;width:100%;margin:7px 0}button{background:#f9d22c;color:#080808;border:0;font-weight:750;cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}.secondary{background:#292929;color:#fff}.danger{background:#9f3535;color:white}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.item{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid #303030}.item:last-child{border-bottom:0}.id{font-family:monospace;word-break:break-all;color:#bbb;font-size:12px}.muted{font-size:13px;color:#aaa}.error{color:#ff8b8b}.success{color:#a5e5b1}.hidden{display:none!important}#toast{min-height:24px;margin-top:14px}@media(max-width:700px){.grid{grid-template-columns:1fr}.item{align-items:flex-start;flex-direction:column}.row button{flex:1}header{padding:16px 20px}}
+.clickable{cursor:pointer}.clickable:hover{color:#f9d22c}.detailgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.detailgrid div{min-width:0;overflow-wrap:anywhere}.detailgrid strong{display:block;color:#aaa;font-size:12px;margin-bottom:4px}.historyentry{border-top:1px solid #333;padding:12px 0}@media(max-width:700px){.detailgrid{grid-template-columns:1fr}} .sh-header{justify-content:space-between}.sh-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sh-field{font-size:12px;color:#bbb}.sh-venue{border-top:1px solid #303030;padding:14px 0;display:flex;justify-content:space-between;gap:16px;align-items:center}.sh-venue-info{flex:1}.sh-venue-info strong{color:#fff}.sh-filters select{max-width:245px}.sh-filters input{flex:1;min-width:170px}.sh-days{border:1px solid #444;border-radius:10px;display:flex;gap:12px;flex-wrap:wrap}.sh-days label{display:flex;align-items:center;gap:4px}.sh-days input{width:auto}.sh-form{display:grid;gap:16px}@media(max-width:700px){.sh-grid{grid-template-columns:1fr}} </style></head><body>
+<header><div class="brand">VIP<span>pl</span> <small style="font-size:12px;color:#aaa;letter-spacing:0">ADMIN</small></div><span class="pill">PREVIEW ONLY</span></header>
+<main><h1>Membership control.</h1><p>Private Preview administration. All decisions are authorized and recorded server-side.</p>
+<section class="card" id="setup"><h2>Connect to Preview</h2><p>Use the Preview Supabase publishable/anon key. Never enter a secret or service-role key.</p><label for="key">Preview publishable key</label><input id="key" type="password" autocomplete="off" placeholder="sb_publishable_… or eyJ…"><button id="connect">Connect</button></section>
+<section class="card hidden" id="login"><h2>Administrator sign-in</h2><p>Use the same verified email associated with your approved administrator identity.</p><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com"><button id="send">Send verification code</button><div id="otpbox" class="hidden"><label for="otp">Six-digit email code</label><input id="otp" inputmode="numeric" maxlength="6" placeholder="000000"><button id="verify">Verify & sign in</button></div></section>
+<section id="dashboard" class="hidden"><div class="row" style="gap:8"><button class="secondary" id="navMembership">Membership</button><button class="secondary" id="navSocialHour">Social Hour Manager</button></div><div id="membershipArea"><div class="row" style="justify-content:space-between"><h2>Applications & members</h2><button class="secondary" id="signout">Sign out</button></div><div class="grid"><div class="card"><div class="metric" id="pendingCount">—</div><div>Pending</div></div><div class="card"><div class="metric" id="approvedCount">—</div><div>Approved</div></div><div class="card"><div class="metric" id="otherCount">—</div><div>Other statuses</div></div></div>
+<div class="card"><div class="row" style="justify-content:space-between"><h2>Membership queue</h2><button id="refresh" class="secondary">Refresh</button></div><input id="search" placeholder="Search name, email, username, ID or status" aria-label="Filter members"><div id="list"></div></div>
+<div class="card hidden" id="details"><div class="row" style="justify-content:space-between"><h2>Applicant details</h2><button id="closeDetails" class="secondary">Close</button></div><div id="profile"></div><h3>Review history</h3><div id="history"></div></div><div class="card"><h2>AI management · planned</h2><p>Future agents will use individually scoped credentials, human approval for consequential decisions, complete audit logs, and an emergency disable control. No autonomous approval permissions are enabled.</p></div></div><div id="socialHourDesktop" class="card hidden"></div></section>
+<div id="toast" role="status" aria-live="polite"></div>
+</main><script type="module">
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
+import {createSocialHourAdmin} from './social-hour.js';
+const URL='https://azqcmotehuebpjejolhn.supabase.co';
+let client=null,members=[],membershipAllowed=false,socialAllowed=false,socialManager=null;
+const el=id=>document.getElementById(id);
+function show(id,on=true){el(id).classList.toggle('hidden',!on)}
+function notice(s,bad=false){el('toast').textContent=s;el('toast').className=bad?'error':'success'}
+function busy(btn,on){btn.disabled=on}
+async function action(btn,fn){busy(btn,true);try{await fn()}catch(e){notice(e.message||String(e),true)}finally{busy(btn,false)}}
+el('connect').onclick=()=>action(el('connect'),async()=>{const key=el('key').value.trim();if(!key||key.startsWith('sb_secret_'))throw Error('Enter a Preview publishable/anon key, not a secret key.');client=createClient(URL,key,{auth:{persistSession:true,autoRefreshToken:true}});el('key').value='';show('setup',false);show('login');notice('Connected to Preview. Sign in to continue.');if((await client.auth.getSession()).data.session)await load()});
+el('send').onclick=()=>action(el('send'),async()=>{const email=el('email').value.trim().toLowerCase();if(!email)throw Error('Enter your email.');const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:false}});if(error)throw error;show('otpbox');notice('Verification code sent.')});
+el('verify').onclick=()=>action(el('verify'),async()=>{const {error}=await client.auth.verifyOtp({email:el('email').value.trim().toLowerCase(),token:el('otp').value.trim(),type:'email'});if(error)throw error;await load()});
+el('refresh').onclick=()=>action(el('refresh'),load);
+el('search').oninput=render;
+el('closeDetails').onclick=()=>show('details',false);
+function tab(which){show('membershipArea',which==='members'&&membershipAllowed);show('socialHourDesktop',which==='social'&&socialAllowed);el('navMembership').disabled=!membershipAllowed;el('navSocialHour').disabled=!socialAllowed;}
+el('navMembership').onclick=()=>tab('members');el('navSocialHour').onclick=()=>tab('social');
+el('signout').onclick=()=>action(el('signout'),async()=>{await client.auth.signOut();members=[];membershipAllowed=false;socialAllowed=false;socialManager=null;show('dashboard',false);show('login');notice('Signed out.')});
+async function load(){const [membershipAuth,socialAuth]=await Promise.all([client.rpc('vippl_admin_is_authorized',{p_write:false}),client.rpc('vippl_social_hour_is_admin')]);membershipAllowed=!membershipAuth.error&&membershipAuth.data===true;socialAllowed=!socialAuth.error&&socialAuth.data===true;if(!membershipAllowed&&!socialAllowed)throw Error('This account is not authorized for VIPpl administration.');if(membershipAllowed){const {data,error}=await client.rpc('vippl_admin_list_memberships');if(error)throw error;members=data||[];render()}show('login',false);show('dashboard');if(socialAllowed&&!socialManager)socialManager=createSocialHourAdmin(client,el('socialHourDesktop'),notice);tab(membershipAllowed?'members':'social');notice('Connected to authorized Preview admin features.')}
+function dateText(value){return value?new Date(value).toLocaleString():'Not yet';}
+function field(label,value){const wrap=document.createElement('div');const title=document.createElement('strong');title.textContent=label;const val=document.createElement('span');val.textContent=value??'Not provided';wrap.append(title,val);return wrap}
+async function openDetails(m){show('details');const profile=el('profile');profile.replaceChildren();const grid=document.createElement('div');grid.className='detailgrid';for(const [label,value] of [['Display name',m.display_name],['Username',m.username],['Email',m.email],['Status',m.status],['Applied',dateText(m.created_at)],['Last reviewed',dateText(m.reviewed_at)],['Account ID',m.account_id],['Bio',m.bio]])grid.append(field(label,value));profile.append(grid);el('details').scrollIntoView({behavior:'smooth',block:'start'});const history=el('history');history.textContent='Loading review history…';const {data,error}=await client.rpc('vippl_admin_membership_history',{p_account_id:m.account_id});if(error){history.textContent='Review history unavailable: '+error.message;return}history.replaceChildren();if(!data?.length){history.textContent='No previous decisions recorded.';return}for(const h of data){const entry=document.createElement('div');entry.className='historyentry';entry.append(field(dateText(h.occurred_at),h.old_status+' → '+h.new_status),field('Reviewed by',h.reviewer_email||'Unknown reviewer'),field('Reason',h.reason||'Not specified'));history.append(entry)}}
+function render(){
+el('pendingCount').textContent=members.filter(m=>m.status==='pending').length;
+el('approvedCount').textContent=members.filter(m=>m.status==='approved').length;
+el('otherCount').textContent=members.filter(m=>!['pending','approved'].includes(m.status)).length;
+const list=el('list');list.replaceChildren();const term=el('search').value.trim().toLowerCase();
+const filtered=members.filter(m=>[m.account_id,m.status,m.username,m.display_name,m.email].some(v=>String(v||'').toLowerCase().includes(term))).sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1));
+if(!filtered.length){const p=document.createElement('p');p.textContent='No matching memberships.';list.append(p);return}
+for(const m of filtered){
+ const item=document.createElement('div');item.className='item';
+ const left=document.createElement('div');left.className='clickable';left.tabIndex=0;left.setAttribute('role','button');left.setAttribute('aria-label','View application for '+(m.display_name||m.username||m.account_id));
+ left.onclick=()=>openDetails(m).catch(e=>notice(e.message,true));left.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();left.click()}};
+ const name=document.createElement('strong');name.textContent=m.display_name||m.username||'Unnamed applicant';
+ const meta=document.createElement('div');meta.className='muted';meta.textContent=[m.email||'No email',m.status.toUpperCase(),'Applied '+dateText(m.created_at)].join(' · ');
+ const id=document.createElement('div');id.className='id';id.textContent=m.account_id;
+ const view=document.createElement('div');view.className='muted';view.textContent='View application & history →';
+ left.append(name,meta,id,view);
+ const controls=document.createElement('div');controls.className='row';
+ for(const [label,next,cls] of [['Approve','approved',''],['Reject','rejected','danger'],['Suspend','suspended','secondary'],['Reset','pending','secondary']]){
+  if(m.status===next)continue;const b=document.createElement('button');b.textContent=label;b.className=cls;
+  b.onclick=()=>action(b,async()=>{if(!confirm('Change membership for '+(m.display_name||m.username||m.account_id)+' from '+m.status+' to '+next+'?'))return;
+   const reason=prompt('Reason (optional, logged in audit trail):');if(reason===null)return;
+   const {error}=await client.rpc('vippl_admin_set_membership',{p_account_id:m.account_id,p_status:next,p_reason:reason});if(error)throw error;
+   await load();const updated=members.find(x=>x.account_id===m.account_id);if(updated)await openDetails(updated);
+   if(next==='approved'){
+     const {data:pushResult,error:pushError}=await client.functions.invoke('vippl-approval-push',{body:{account_id:m.account_id}});
+     if(pushError){notice('Approved and audited. Push notification unavailable until the Preview sender is deployed.',true)}
+     else{notice('Approved and audited. Push notifications sent: '+(pushResult?.sent??0)+'.')}
+   }else notice('Membership updated to '+next+'.')});
+  controls.append(b)
+ }
+ item.append(left,controls);list.append(item)
+}
+}
+</script></body></html>
