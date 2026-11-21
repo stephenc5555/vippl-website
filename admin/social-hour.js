@@ -9,32 +9,72 @@ const choice=(form,label,key,options,value)=>{const wrap=html('label',label,{cla
 const minutes=v=>{if(!v)return null;const a=/^(\d{2}):(\d{2})$/.exec(v);if(!a)return null;const h=Number(a[1]),m=Number(a[2]);return h<24&&m<60?h*60+m:null};
 const clock=n=>Number.isInteger(n)?String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'):'';
 export function createSocialHourAdmin(client,container,notify){
- let market='Los Angeles',search='',offset=0,records=[],editing=null;
+ let market='Los Angeles',search='',records=[],editing=null,requestId=0;
+ const cache=new Map();
  container.replaceChildren();
- const header=html('div','',{className:'row sh-header'}),title=html('h2','Social Hour · Desktop Manager'),add=html('button','+ Add venue'),reload=html('button','Refresh',{className:'secondary'});
+ const header=html('div','',{className:'row sh-header'}),title=html('h2','Social Hour · City Audit'),add=html('button','+ Add venue'),reload=html('button','Refresh all cities',{className:'secondary'});
  header.append(title,add,reload);container.append(header);
- const intro=html('p','Add, edit, review, or close venue listings. Changes save directly to Supabase Preview and appear in the mobile app when it next fetches Social Hour.');
- container.append(intro);
- const filters=html('div','',{className:'row sh-filters'}),marketSel=html('select','',{id:'shMarket'}),query=html('input','',{type:'search',placeholder:'Search venue or address'}),previous=html('button','Previous',{className:'secondary'}),next=html('button','Next',{className:'secondary'});
- for(const v of markets)marketSel.append(html('option',v,{value:v}));marketSel.value=market;
- filters.append(marketSel,query,previous,next);container.append(filters);
+ container.append(html('p','Review every city in one place. Expand a city to inspect venues, reported schedules, source links and incomplete locations. Edit changes are saved to Preview and reflected in the mobile app on its next refresh.'));
+ const summary=html('div','',{className:'sh-summary'});container.append(summary);
+ const filters=html('div','',{className:'row sh-filters'}),query=html('input','',{type:'search',placeholder:'Search all cities by venue or address'}),onlyIssues=html('label','',{className:'sh-filter-label'});
+ const issueCheck=html('input','',{type:'checkbox'});onlyIssues.append(issueCheck,html('span','Show only listings needing an audit'));
+ filters.append(query,onlyIssues);container.append(filters);
  const state=html('div','',{className:'muted'}),list=html('div','',{className:'sh-list'}),edit=html('div','',{className:'card hidden',id:'shEditor'});
  container.append(state,list,edit);
  const safeError=e=>notify(e?.message||String(e),true);
  const rpc=async(name,args)=>{const {data,error}=await client.rpc(name,args);if(error)throw error;return data};
- async function load(){state.textContent='Loading…';try{
-  const allowed=await rpc('vippl_social_hour_is_admin');if(!allowed)throw Error('Social Hour editor requires an authorized administrator.');
-  const rows=await rpc('vippl_social_hour_admin_list',{p_market:market,p_search:search,p_offset:offset});
-  records=Array.isArray(rows)?rows:[];render();state.textContent=records.length+' venues on this page · '+market+(offset?' · starting '+(offset+1):'');
- }catch(e){records=[];render();state.textContent='Could not load Social Hour: '+(e?.message||e);safeError(e)}}
- function render(){list.replaceChildren();if(!records.length){list.append(html('p','No matching venues.'));return}
-  for(const item of records){const row=html('div','',{className:'sh-venue'});
-   const info=html('div','',{className:'sh-venue-info'});info.append(html('strong',item.name));
-   info.append(html('div',item.address,{className:'muted'}));
-   info.append(html('div',item.promotion_hours||'No published hours',{className:'muted'}));
-   info.append(html('div',item.status+(item.edited?' · Admin edit':' · Source listing')+' · '+item.verification,{className:'muted'}));
-   const b=html('button','Edit',{className:'secondary'});b.onclick=()=>openEditor(item);
-   row.append(info,b);list.append(row)}
+ const needsAudit=item=>!item.promotion_hours||!String(item.promotion_hours).trim()||
+   !Number.isFinite(item.latitude)||!Number.isFinite(item.longitude)||
+   /not confirmed/i.test(item.address||'')||item.status!=='open';
+ async function load(){
+  const id=++requestId;state.textContent='Loading eight city inventories…';
+  try{
+   const allowed=await rpc('vippl_social_hour_is_admin');if(!allowed)throw Error('Social Hour requires an authorized administrator.');
+   const results=await Promise.allSettled(markets.map(m=>rpc('vippl_social_hour_admin_list',{p_market:m,p_search:'',p_offset:0})));
+   if(id!==requestId)return;
+   cache.clear();const errors=[];
+   for(let i=0;i<markets.length;i++){
+    const result=results[i];
+    if(result.status==='fulfilled'&&Array.isArray(result.value))cache.set(markets[i],result.value);
+    else errors.push(markets[i]+': '+(result.reason?.message||'Query failed'));
+   }
+   if(errors.length){state.textContent='Some cities could not load: '+errors.join('; ');notify('Partial Social Hour inventory — retry failed cities.',true)}
+   else state.textContent='All eight city inventories loaded · Preview database';
+   render();
+  }catch(e){cache.clear();render();state.textContent='Could not load Social Hour: '+(e?.message||e);safeError(e)}
+ }
+ function render(){
+  list.replaceChildren();summary.replaceChildren();
+  const all=markets.flatMap(m=>cache.get(m)||[]);
+  const total=all.length,issues=all.filter(needsAudit).length,located=all.filter(x=>Number.isFinite(x.latitude)&&Number.isFinite(x.longitude)).length;
+  for(const [label,value] of [['Total venues',total],['Need audit',issues],['With coordinates',located],['Cities loaded',cache.size]]){
+   const box=html('div','',{className:'sh-stat'});box.append(html('div',value,{className:'metric'}),html('div',label,{className:'muted'}));summary.append(box);
+  }
+  const term=query.value.trim().toLowerCase(),issueOnly=issueCheck.checked;
+  for(const city of markets){
+   const rows=cache.get(city);const section=html('details','',{className:'sh-city'});
+   section.open=Boolean(term)||city===market;
+   const heading=html('summary','',{className:'sh-city-heading'});
+   const cityTitle=html('strong',city),badge=html('span',rows?rows.length+' venues · '+rows.filter(needsAudit).length+' need audit':'Unavailable',{className:'sh-count'});
+   heading.append(cityTitle,badge);section.append(heading);
+   const body=html('div','',{className:'sh-city-body'}),filtered=(rows||[]).filter(item=>
+    (!term||[item.name,item.address,item.promotion_hours,item.venue_key].some(v=>String(v||'').toLowerCase().includes(term)))&&(!issueOnly||needsAudit(item)));
+   if(!filtered.length)body.append(html('p',rows?'No matching venues in this city.':'Inventory unavailable; retry refresh.',{className:'muted'}));
+   for(const item of filtered){
+    const row=html('div','',{className:'sh-venue'});
+    const info=html('div','',{className:'sh-venue-info'});info.append(html('strong',item.name));
+    info.append(html('div',item.address,{className:'muted'}));
+    info.append(html('div',item.promotion_hours||'Hours missing · needs review',{className:'muted'}));
+    info.append(html('div',[
+      item.status||'open',item.verification||'reported',
+      item.edited?'Manually edited':'Directory source',
+      Number.isFinite(item.latitude)&&Number.isFinite(item.longitude)?'Location mapped':'Coordinates missing'
+    ].join(' · '),{className:'muted'}));
+    const controls=html('div','',{className:'row'}),source=html('a','Source',{href:item.source_url,target:'_blank',rel:'noopener noreferrer',className:'sh-source'}),button=html('button','Edit',{className:'secondary'});
+    button.onclick=()=>{market=city;openEditor(item)};controls.append(source,button);row.append(info,controls);body.append(row);
+   }
+   section.append(body);list.append(section);
+  }
  }
  function openEditor(item=null){
   editing=item;edit.replaceChildren();edit.classList.remove('hidden');edit.append(html('h3',item?'Edit '+item.name:'Add a Social Hour venue'));
@@ -95,13 +135,11 @@ export function createSocialHourAdmin(client,container,notify){
     p_days:selected.length?selected:null,p_start:begin,p_end:finish,p_timezone:selected.length?zone.value:null,
     p_lat:lat.value?Number(lat.value):null,p_lon:lon.value?Number(lon.value):null,
     p_verification:verification.value,p_status:status.value,p_note:note.value.slice(0,500)});
-   notify('Saved to Preview. App and desktop use the same member feed.');edit.classList.add('hidden');market=m.value;marketSel.value=market;await load();
+   notify('Saved to Preview. App and desktop use the same member feed.');edit.classList.add('hidden');market=m.value;await load();
   }catch(err){safeError(err)}finally{save.disabled=false}};
  }
- add.onclick=()=>openEditor();reload.onclick=()=>load();marketSel.onchange=()=>{market=marketSel.value;offset=0;void load()};
- let searchTimer;query.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{search=query.value.trim();offset=0;void load()},250)};
- previous.onclick=()=>{if(offset>=100){offset-=100;void load()}};
- next.onclick=()=>{if(records.length===100){offset+=100;void load()}};
+ add.onclick=()=>openEditor();reload.onclick=()=>load();
+ query.oninput=render;issueCheck.onchange=render;
  void load();
  return {refresh:load};
 }
