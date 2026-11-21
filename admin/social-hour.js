@@ -1,0 +1,107 @@
+// Desktop Social Hour manager. Shares Supabase Preview with VIPpl Android.
+// No secret keys, direct table access, or browser-side admin bypasses.
+const markets=['Los Angeles','San Francisco','New York City','Chicago','Miami','Dallas','Frisco','Buckhead'];
+const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const timezones={'Los Angeles':'America/Los_Angeles','San Francisco':'America/Los_Angeles','New York City':'America/New_York',Chicago:'America/Chicago',Miami:'America/New_York',Dallas:'America/Chicago',Frisco:'America/Chicago',Buckhead:'America/New_York'};
+const html=(tag,text,attrs={})=>{const n=document.createElement(tag);n.textContent=String(text??'');for(const [k,v] of Object.entries(attrs)){if(k==='className')n.className=v;else n.setAttribute(k,v)}return n};
+const formField=(form,label,key,initial='',type='text')=>{const wrap=html('label',label,{className:'sh-field'});const input=html('input','',{name:key,type,value:String(initial??'')});input.value=String(initial??'');wrap.append(input);form.append(wrap);return input};
+const choice=(form,label,key,options,value)=>{const wrap=html('label',label,{className:'sh-field'}),el=html('select','',{name:key});for(const option of options){const o=html('option',option,{value:option});el.append(o)}el.value=value||options[0];wrap.append(el);form.append(wrap);return el};
+const minutes=v=>{if(!v)return null;const a=/^(\d{2}):(\d{2})$/.exec(v);if(!a)return null;const h=Number(a[1]),m=Number(a[2]);return h<24&&m<60?h*60+m:null};
+const clock=n=>Number.isInteger(n)?String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'):'';
+export function createSocialHourAdmin(client,container,notify){
+ let market='Los Angeles',search='',offset=0,records=[],editing=null;
+ container.replaceChildren();
+ const header=html('div','',{className:'row sh-header'}),title=html('h2','Social Hour · Desktop Manager'),add=html('button','+ Add venue'),reload=html('button','Refresh',{className:'secondary'});
+ header.append(title,add,reload);container.append(header);
+ const intro=html('p','Add, edit, review, or close venue listings. Changes save directly to Supabase Preview and appear in the mobile app when it next fetches Social Hour.');
+ container.append(intro);
+ const filters=html('div','',{className:'row sh-filters'}),marketSel=html('select','',{id:'shMarket'}),query=html('input','',{type:'search',placeholder:'Search venue or address'}),previous=html('button','Previous',{className:'secondary'}),next=html('button','Next',{className:'secondary'});
+ for(const v of markets)marketSel.append(html('option',v,{value:v}));marketSel.value=market;
+ filters.append(marketSel,query,previous,next);container.append(filters);
+ const state=html('div','',{className:'muted'}),list=html('div','',{className:'sh-list'}),edit=html('div','',{className:'card hidden',id:'shEditor'});
+ container.append(state,list,edit);
+ const safeError=e=>notify(e?.message||String(e),true);
+ const rpc=async(name,args)=>{const {data,error}=await client.rpc(name,args);if(error)throw error;return data};
+ async function load(){state.textContent='Loading…';try{
+  const allowed=await rpc('vippl_social_hour_is_admin');if(!allowed)throw Error('Social Hour editor requires an authorized administrator.');
+  const rows=await rpc('vippl_social_hour_admin_list',{p_market:market,p_search:search,p_offset:offset});
+  records=Array.isArray(rows)?rows:[];render();state.textContent=records.length+' venues on this page · '+market+(offset?' · starting '+(offset+1):'');
+ }catch(e){records=[];render();state.textContent='Could not load Social Hour: '+(e?.message||e);safeError(e)}}
+ function render(){list.replaceChildren();if(!records.length){list.append(html('p','No matching venues.'));return}
+  for(const item of records){const row=html('div','',{className:'sh-venue'});
+   const info=html('div','',{className:'sh-venue-info'});info.append(html('strong',item.name));
+   info.append(html('div',item.address,{className:'muted'}));
+   info.append(html('div',item.promotion_hours||'No published hours',{className:'muted'}));
+   info.append(html('div',item.status+(item.edited?' · Admin edit':' · Source listing')+' · '+item.verification,{className:'muted'}));
+   const b=html('button','Edit',{className:'secondary'});b.onclick=()=>openEditor(item);
+   row.append(info,b);list.append(row)}
+ }
+ function openEditor(item=null){
+  editing=item;edit.replaceChildren();edit.classList.remove('hidden');edit.append(html('h3',item?'Edit '+item.name:'Add a Social Hour venue'));
+  const form=html('form','',{className:'sh-form'}),grid=html('div','',{className:'sh-grid'});
+  const m=choice(grid,'City','market',markets,item?.market||market);
+  const name=formField(grid,'Venue name','name',item?.name||'');
+  const address=formField(grid,'Street address','address',item?.address||'');
+  const url=formField(grid,'Official / source URL (https)','url',item?.source_url||'','url');
+  const hours=formField(grid,'Reported promotion details','hours',item?.promotion_hours||'');
+  const lat=formField(grid,'Latitude (optional)','lat',item?.latitude??'','number');lat.step='any';
+  const lon=formField(grid,'Longitude (optional)','lon',item?.longitude??'','number');lon.step='any';
+  const verification=choice(grid,'Schedule confidence','verification',['reported','verified'],item?.verification||'reported');
+  const status=choice(grid,'Listing status','status',['open','needs_review','closed'],item?.status||'open');
+  const zone=choice(grid,'Venue timezone','timezone',['America/Los_Angeles','America/Chicago','America/New_York'],item?.timezone||timezones[item?.market||market]);
+  m.onchange=()=>{if(!item)zone.value=timezones[m.value]};
+  const start=formField(grid,'Promotion starts (24h HH:MM)','start',clock(item?.start_minutes),'time');
+  const end=formField(grid,'Promotion ends (24h HH:MM)','end',clock(item?.end_minutes),'time');
+  const note=formField(grid,'Internal note','note',item?.note||'');
+  const days=html('fieldset','',{className:'sh-days'});days.append(html('legend','Applicable promotion days'));
+  const checks=dayNames.map((day,i)=>{const label=html('label','');const check=html('input','',{type:'checkbox',value:String(i)});check.checked=(item?.weekdays||[]).includes(i);label.append(check,html('span',day));days.append(label);return check});
+  form.append(grid,days);
+  const hint=html('p','“Verified” requires explicit days, start/end times and a source. Use “reported” for directory information. Closing a venue removes it from the app; it does not delete source evidence.',{className:'muted'});
+  form.append(hint);
+  if(item){const history=html('div','',{className:'sh-history'});
+   const toggle=html('button','View edit history',{type:'button',className:'secondary'});
+   const output=html('div','',{className:'muted'});
+   toggle.onclick=async()=>{toggle.disabled=true;output.textContent='Loading…';try{
+    const entries=await rpc('vippl_social_hour_admin_audit',{p_market:item.market,p_key:item.venue_key});
+    output.replaceChildren();
+    if(!entries?.length){output.textContent='No manual edits recorded.';return}
+    for(const record of entries){const block=html('div','',{className:'historyentry'});
+     block.append(html('strong',new Date(record.changed_at).toLocaleString()));
+     const prev=record.previous||{},current=record.current||{};
+     for(const key of ['name','address','promotion_hours','weekdays','start_minutes','end_minutes','verification','status']){
+      if(JSON.stringify(prev[key])!==JSON.stringify(current[key]))
+       block.append(html('div',key+': '+JSON.stringify(prev[key]??null)+' → '+JSON.stringify(current[key]??null),{className:'muted'}));
+     }
+     output.append(block);
+    }
+   }catch(err){output.textContent='History unavailable';safeError(err)}finally{toggle.disabled=false}};
+   history.append(toggle,output);form.append(history);
+  }
+  const actions=html('div','',{className:'row'}),save=html('button','Save to Preview',{type:'submit'}),cancel=html('button','Cancel',{type:'button',className:'secondary'});
+  cancel.onclick=()=>edit.classList.add('hidden');actions.append(save,cancel);form.append(actions);edit.append(form);edit.scrollIntoView({behavior:'smooth',block:'start'});
+  form.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{
+   if(!name.value.trim()||!address.value.trim()||!url.value.trim())throw Error('Venue name, address and source URL are required.');
+   if(!/^https:\/\//i.test(url.value))throw Error('Source URL must use HTTPS.');
+   const selected=checks.flatMap((c,i)=>c.checked?[i]:[]);
+   const begin=minutes(start.value),finish=minutes(end.value);
+   if(selected.length===0&&(start.value||end.value))throw Error('Select schedule days or clear both times.');
+   if(selected.length>0&&(begin===null||finish===null||begin===finish))throw Error('Select valid promotion start and end times.');
+   if(verification.value==='verified'&&selected.length===0)throw Error('Verified schedules need specific days and times.');
+   if(Boolean(lat.value)!==Boolean(lon.value))throw Error('Enter both coordinates, or neither.');
+   if(item?.status!=='closed'&&status.value==='closed'&&!confirm('Close this venue? It will disappear from the mobile Social Hour catalog.'))return;
+   if(item?.market!==m.value&&item)throw Error('To move an existing venue to another city, create a new record and close the old one.');
+   await rpc('vippl_social_hour_admin_save',{p_market:m.value,p_key:item?.venue_key||'',p_name:name.value.trim(),
+    p_address:address.value.trim(),p_source_url:url.value.trim(),p_hours:hours.value.trim()||null,
+    p_days:selected.length?selected:null,p_start:begin,p_end:finish,p_timezone:selected.length?zone.value:null,
+    p_lat:lat.value?Number(lat.value):null,p_lon:lon.value?Number(lon.value):null,
+    p_verification:verification.value,p_status:status.value,p_note:note.value.slice(0,500)});
+   notify('Saved to Preview. App and desktop use the same member feed.');edit.classList.add('hidden');market=m.value;marketSel.value=market;await load();
+  }catch(err){safeError(err)}finally{save.disabled=false}};
+ }
+ add.onclick=()=>openEditor();reload.onclick=()=>load();marketSel.onchange=()=>{market=marketSel.value;offset=0;void load()};
+ let searchTimer;query.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{search=query.value.trim();offset=0;void load()},250)};
+ previous.onclick=()=>{if(offset>=100){offset-=100;void load()}};
+ next.onclick=()=>{if(records.length===100){offset+=100;void load()}};
+ void load();
+ return {refresh:load};
+}
